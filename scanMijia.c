@@ -49,6 +49,11 @@ static int getVal16(uint8_t* data) {
 }
 
 static void update_data(int devIndex, uint8_t* data, uint8_t length) {
+  printf("ZZZ: update_data: %02X,", length);
+  for (int i = 0; i < length; ++i) {
+    printf(" %02X", data[i]);
+  }
+  printf("\n");
 	if (length!=0x16 && length!=0x17 && length!=0x19)
 		return;
 	if (data[4]!=0x16 || data[5]!=0x95 || data[6]!=0xFE)
@@ -93,6 +98,8 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 	socklen_t olen;
 	int len = 0;
 	int i;
+
+        printf("ZZZ: HCI_MAX_EVENT_SIZE: %d\n", HCI_MAX_EVENT_SIZE);
 
 	olen = sizeof(of);
 	if (getsockopt(dd, SOL_HCI, HCI_FILTER, &of, &olen) < 0) {
@@ -144,14 +151,17 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 		len = 0;
 		FD_ZERO(&set); /* clear the set */
 		FD_SET(dd, &set); /* add our file descriptor to the set */
-		if (maxTime > 0) {
-			timeout.tv_sec = maxTime - (time(NULL) - startTime);
-			timeout.tv_usec = 0;
-			if (timeout.tv_sec <= 0)
-				goto done;
-			rv = select(dd + 1, &set, NULL, NULL, &timeout);
-		} else
-			rv = select(dd + 1, &set, NULL, NULL, NULL);
+		//if (maxTime > 0) {
+		//	timeout.tv_sec = maxTime - (time(NULL) - startTime);
+		//	timeout.tv_usec = 0;
+		//	if (timeout.tv_sec <= 0)
+		//		goto done;
+                //        printf("ZZZ: select() ...\n");
+		//	rv = select(dd + 1, &set, NULL, NULL, &timeout);
+                //        printf("ZZZ: select(): rv: %d\n", rv);
+		//} else {
+		//	rv = select(dd + 1, &set, NULL, NULL, NULL);
+                //}
 
 		if(rv == -1) { /* an error accured */
 			perror("select");
@@ -160,8 +170,9 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 		} else if (rv == 0) { /* a timeout occured */
 			goto done;
 		}
+                printf("ZZZ: read() ...\n");
 		len = read(dd, buf, sizeof(buf));
-		printf("ZZZ: read(): %d\n", len);
+		printf("ZZZ: read(): %d\nHCI_EVENT_HDR_SIZE: %d\n", len, HCI_EVENT_HDR_SIZE);
 
 		ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
 		len -= (1 + HCI_EVENT_HDR_SIZE);
@@ -176,6 +187,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 
 		if (debug) {
 			ba2str(&info->bdaddr,addr);
+                        printf("ZZZ: le_advertising_info::length: %d\n", info->length);
 			printf("%s - ",addr);
 			for (i=0; i<info->length; i++)
 				printf("%02X ", (unsigned int)(info->data[i]& 0xFF));
@@ -280,7 +292,7 @@ int main(int argc, char *argv[])
 	uint8_t filter_policy = 0x01; /* Whitelist (0x00 = normal scan) */
 	uint16_t interval = htobs(0x0010);
 	uint16_t window = htobs(0x0010);
-	uint8_t filter_dup = 0x01; /* Ffilter duplicates (0x00 d don't filter duplicates) */
+	uint8_t filter_dup = 0x00; /* Ffilter duplicates (0x00 d don't filter duplicates) */
 	int i, dev_id = -1;
 	char bad_chars[] = "!@%^*~|";
 	char invalid_found = 0;
