@@ -59,34 +59,43 @@ static void update_data(int devIndex, uint8_t* data, uint8_t length) {
   if (data[4]!=0x16 || data[5]!=0x95 || data[6]!=0xFE)
     return;
 
-        time_t currentTime = time(NULL);
+  time_t currentTime = time(NULL);
 
+  bool has_temperature = false;
+  bool has_humidity = false;
+  bool has_battery = false;
   switch (data[18]) {
     case 0x0D:
       temperature[devIndex] += getVal16(&data[21]);
       ntSamples[devIndex]++;
       humidity[devIndex] += getVal16(&data[23]);
       nhSamples[devIndex]++;
-      char buff[20];
       timeTemperature[devIndex] = currentTime;
       timeHumidity[devIndex] = currentTime;
+      has_temperature = true;
+      has_humidity = true;
       break;
     case 0x0A:
       battery[devIndex] = data[21]&0xff;
       timeBattery[devIndex] = currentTime;
+      has_battery = true;
       break;
     case 0x04:
       temperature[devIndex] += getVal16(&data[21]);
       ntSamples[devIndex]++;
       timeTemperature[devIndex] = currentTime;
+      has_temperature = true;
       break;
     case 0x06:
       humidity[devIndex] += getVal16(&data[21]);
       nhSamples[devIndex]++;
       timeHumidity[devIndex] = currentTime;
+      has_humidity = true;
       break;
-    default:
-      return;
+  }
+
+  if (has_temperature) {
+    printf("T %lu %.1f\n", currentTime, static_cast<float>(temperature[devIndex]) * 0.1f);
   }
 }
 
@@ -177,7 +186,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
     ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
     len -= (1 + HCI_EVENT_HDR_SIZE);
 
-    meta = (void *) ptr;
+    meta = reinterpret_cast<evt_le_meta_event*>(ptr);
 
     if (meta->subevent != 0x02)
       goto done;
@@ -304,7 +313,7 @@ int run(int dd, char** bt_addrs, uint8_t filter_dup) {
   }
 
   /* add BT devices to white list */
-  devsBtAddr = malloc(nDevs * sizeof(bdaddr_t));
+  devsBtAddr = new bdaddr_t[nDevs];
   for (i=0; i<nDevs; i++) {
     err = str2ba(bt_addrs[i], &devsBtAddr[i]);
     if (err < 0) {
@@ -334,14 +343,14 @@ int run(int dd, char** bt_addrs, uint8_t filter_dup) {
     return 1;
   }
 
-  temperature = (int*) malloc(nDevs * sizeof(int));
-  humidity = (int*) malloc(nDevs * sizeof(int));
-  battery = (int*) malloc(nDevs * sizeof(int));
-  ntSamples = (int*) malloc(nDevs * sizeof(int));
-  nhSamples = (int*) malloc(nDevs * sizeof(int));
-  timeTemperature = malloc(nDevs * sizeof(long));
-  timeHumidity = malloc(nDevs * sizeof(long));
-  timeBattery = malloc(nDevs * sizeof(long));
+  temperature = new int[nDevs];
+  humidity = new int[nDevs];
+  battery = new int[nDevs];
+  ntSamples = new int[nDevs];
+  nhSamples = new int[nDevs];
+  timeTemperature = new unsigned long[nDevs];
+  timeHumidity = new unsigned long[nDevs];
+  timeBattery = new unsigned long[nDevs];
   for (i = 0; i < nDevs; i++) {
     temperature[i] = 0;
     humidity[i] = 0;
@@ -403,7 +412,7 @@ int main(int argc, char *argv[])
           printf("Invalid file name\n");
           exit(1);
         }
-        filename = malloc(strlen(optarg)+1);
+        filename = new char[strlen(optarg)+1];
         strcpy(filename,optarg);
         break;
       case 'd':
