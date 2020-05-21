@@ -19,7 +19,7 @@
 #include "hci.h"
 #include "hci_lib.h"
 
-static int numSamples = 1;
+static int numSamples = -1;
 static int maxTime = -1;
 static char debug = 0;
 
@@ -49,11 +49,11 @@ static int getVal16(uint8_t* data) {
 }
 
 static void update_data(int devIndex, uint8_t* data, uint8_t length) {
-  printf("ZZZ: update_data: %02X,", length);
-  for (int i = 0; i < length; ++i) {
-    printf(" %02X", data[i]);
-  }
-  printf("\n");
+  //printf("ZZZ: update_data: %02X,", length);
+  //for (int i = 0; i < length; ++i) {
+  //  printf(" %02X", data[i]);
+  //}
+  //printf("\n");
   if (length!=0x16 && length!=0x17 && length!=0x19)
     return;
   if (data[4]!=0x16 || data[5]!=0x95 || data[6]!=0xFE)
@@ -64,8 +64,13 @@ static void update_data(int devIndex, uint8_t* data, uint8_t length) {
   bool has_temperature = false;
   bool has_humidity = false;
   bool has_battery = false;
+  float temperature_celsius = 0.0f;
+  float relative_humidity = 0.0f;
+  int battery_percentage = 0;
   switch (data[18]) {
     case 0x0D:
+      temperature_celsius = static_cast<float>(getVal16(&data[21])) * 0.1f;
+      relative_humidity = static_cast<float>(getVal16(&data[23])) * 0.1f;
       temperature[devIndex] += getVal16(&data[21]);
       ntSamples[devIndex]++;
       humidity[devIndex] += getVal16(&data[23]);
@@ -76,17 +81,20 @@ static void update_data(int devIndex, uint8_t* data, uint8_t length) {
       has_humidity = true;
       break;
     case 0x0A:
+      battery_percentage = data[21];
       battery[devIndex] = data[21]&0xff;
       timeBattery[devIndex] = currentTime;
       has_battery = true;
       break;
     case 0x04:
+      temperature_celsius = static_cast<float>(getVal16(&data[21])) * 0.1f;
       temperature[devIndex] += getVal16(&data[21]);
       ntSamples[devIndex]++;
       timeTemperature[devIndex] = currentTime;
       has_temperature = true;
       break;
     case 0x06:
+      relative_humidity = static_cast<float>(getVal16(&data[21])) * 0.1f;
       humidity[devIndex] += getVal16(&data[21]);
       nhSamples[devIndex]++;
       timeHumidity[devIndex] = currentTime;
@@ -95,7 +103,13 @@ static void update_data(int devIndex, uint8_t* data, uint8_t length) {
   }
 
   if (has_temperature) {
-    printf("T %lu %.1f\n", currentTime, static_cast<float>(temperature[devIndex]) * 0.1f);
+    printf("T %lu %.1f\n", currentTime, temperature_celsius);
+  }
+  if (has_humidity) {
+    printf("H %lu %.1f\n", currentTime, relative_humidity);
+  }
+  if (has_battery) {
+    printf("B %lu %d\n", currentTime, battery_percentage);
   }
 }
 
@@ -108,7 +122,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
   int len = 0;
   int i;
 
-        printf("ZZZ: HCI_MAX_EVENT_SIZE: %d\n", HCI_MAX_EVENT_SIZE);
+  //printf("ZZZ: HCI_MAX_EVENT_SIZE: %d\n", HCI_MAX_EVENT_SIZE);
 
   olen = sizeof(of);
   if (getsockopt(dd, SOL_HCI, HCI_FILTER, &of, &olen) < 0) {
@@ -165,9 +179,13 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
       timeout.tv_usec = 0;
       if (timeout.tv_sec <= 0)
         goto done;
-      printf("ZZZ: select() ...\n");
+      if (debug) {
+        printf("ZZZ: select() ...\n");
+      }
       rv = select(dd + 1, &set, NULL, NULL, &timeout);
-      printf("ZZZ: select(): rv: %d\n", rv);
+      if (debug) {
+        printf("ZZZ: select(): rv: %d\n", rv);
+      }
     } else {
       rv = select(dd + 1, &set, NULL, NULL, NULL);
     }
@@ -179,9 +197,10 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
     } else if (rv == 0) { /* a timeout occured */
       goto done;
     }
-    printf("ZZZ: read() ...\n");
     len = read(dd, buf, sizeof(buf));
-    printf("ZZZ: read(): %d\nHCI_EVENT_HDR_SIZE: %d\n", len, HCI_EVENT_HDR_SIZE);
+    if (debug) {
+      printf("ZZZ: read(): %d\n", len);
+    }
 
     ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
     len -= (1 + HCI_EVENT_HDR_SIZE);
@@ -196,7 +215,6 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 
     if (debug) {
       ba2str(&info->bdaddr,addr);
-                        printf("ZZZ: le_advertising_info::length: %d\n", info->length);
       printf("%s - ",addr);
       for (i=0; i<info->length; i++)
         printf("%02X ", (unsigned int)(info->data[i]& 0xFF));
@@ -213,9 +231,13 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
     if ((maxTime > 0) && (time(NULL) - startTime) > maxTime)
       goto done;
     int exit = 1;
-    for (i=0; i<nDevs; i++) {
-      if (ntSamples[i] < numSamples || nhSamples[i] < numSamples)
-        exit = 0;
+    if (numSamples == -1) {
+      exit = 0;
+    } else {
+      for (i=0; i<nDevs; i++) {
+        if (ntSamples[i] < numSamples || nhSamples[i] < numSamples)
+          exit = 0;
+      }
     }
     if (exit == 1)
       goto done;
