@@ -161,6 +161,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 			goto done;
 		}
 		len = read(dd, buf, sizeof(buf));
+		printf("ZZZ: read(): %d\n", len);
 
 		ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
 		len -= (1 + HCI_EVENT_HDR_SIZE);
@@ -232,6 +233,42 @@ static void usage(void)
 		"\t<Value>: float for 'T' and 'H', integer for 'B' \n");
 		
 		
+}
+
+void outputValues() {
+	int i;
+	char addr[18];
+	int fd;
+	FILE* fp;
+	
+	if (filename != NULL) {
+		umask(0);
+		fd = open(filename,O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
+		while (flock(fd, LOCK_EX) != 0)
+			sleep(1);
+		fp = fdopen(fd, "w");
+	} else {
+		fp = stdout;
+	}
+	for (i=0;i<nDevs;i++) {
+		if (temperature[i] != 0) {
+			ba2str(&devsBtAddr[i],addr);
+			fprintf(fp, "T %s %lu %.1f\n", addr, timeTemperature[i], (float)temperature[i]/(float)ntSamples[i]/10.f);
+		}
+		if (humidity[i] != 0) {
+			ba2str(&devsBtAddr[i],addr);
+			fprintf(fp, "H %s %lu %.1f\n", addr, timeHumidity[i], (float)humidity[i]/(float)nhSamples[i]/10.f);
+		}
+		if (battery[i] != 0) {
+			ba2str(&devsBtAddr[i],addr);
+			fprintf(fp, "B %s %lu %d\n", addr, timeBattery[i], battery[i]);
+		}
+	}
+	if (filename != NULL) {
+		int release = flock(fd, LOCK_UN);  // Unlock the file . . .
+		fclose(fp);
+		close(fd);
+	}
 }
 
 int main(int argc, char *argv[])
@@ -385,41 +422,4 @@ int main(int argc, char *argv[])
 
 	outputValues();
 	return 0;
-}
-
-int outputValues() {
-	int i;
-	char addr[18];
-	int fd;
-	FILE* fp;
-	
-	if (filename != NULL) {
-		umask(0);
-		fd = open(filename,O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
-		while (flock(fd, LOCK_EX) != 0)
-			sleep(1);
-		fp = fdopen(fd, "w");
-	} else {
-		fp = stdout;
-	}
-	for (i=0;i<nDevs;i++) {
-		if (temperature[i] != 0) {
-			ba2str(&devsBtAddr[i],addr);
-			fprintf(fp, "T %s %lu %.1f\n", addr, timeTemperature[i], (float)temperature[i]/(float)ntSamples[i]/10.f);
-		}
-		if (humidity[i] != 0) {
-			ba2str(&devsBtAddr[i],addr);
-			fprintf(fp, "H %s %lu %.1f\n", addr, timeHumidity[i], (float)humidity[i]/(float)nhSamples[i]/10.f);
-		}
-		if (battery[i] != 0) {
-			ba2str(&devsBtAddr[i],addr);
-			fprintf(fp, "B %s %lu %d\n", addr, timeBattery[i], battery[i]);
-		}
-	}
-	if (filename != NULL) {
-		int release = flock(fd, LOCK_UN);  // Unlock the file . . .
-		fclose(fp);
-		close(fd);
-	}
-    return;
 }
