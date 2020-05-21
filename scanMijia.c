@@ -283,17 +283,87 @@ void outputValues() {
   }
 }
 
-int main(int argc, char *argv[])
-{
-  int err, opt, dd;
+// Return value will be used as exit code.
+int run(int dd, char** bt_addrs, uint8_t filter_dup) {
+  int err = 0;
   uint8_t own_type = LE_PUBLIC_ADDRESS; /* (other option LE_RANDOM_ADDRESS) */
   uint8_t scan_type = 0x00; /* Passive (0x01 = normal scan) */ 
   uint8_t filter_type = 0;
   uint8_t filter_policy = 0x01; /* Whitelist (0x00 = normal scan) */
   uint16_t interval = htobs(0x0010);
   uint16_t window = htobs(0x0010);
-  uint8_t filter_dup = 0x00; /* Ffilter duplicates (0x00 d don't filter duplicates) */
+  int i;
+
+  /* clear white list */
+  err = hci_le_clear_white_list(dd, 1000);
+  if (err < 0) {
+    err = -errno;
+    fprintf(stderr, "Can't clear white list: %s(%d)\n",
+              strerror(-err), -err);
+    return 1;
+  }
+
+  /* add BT devices to white list */
+  devsBtAddr = malloc(nDevs * sizeof(bdaddr_t));
+  for (i=0; i<nDevs; i++) {
+    err = str2ba(bt_addrs[i], &devsBtAddr[i]);
+    if (err < 0) {
+      printf("Bad BT address\n");
+      return 1;
+    }
+
+    err = hci_le_add_white_list(dd, &devsBtAddr[i], own_type, 1000);
+    if (err < 0) {
+      err = -errno;
+      fprintf(stderr, "Can't add to white list: %s(%d)\n",
+                strerror(-err), -err);
+      return 1;
+    }
+  }
+
+  err = hci_le_set_scan_parameters(dd, scan_type, interval, window,
+            own_type, filter_policy, 10000);
+  if (err < 0) {
+    perror("Set scan parameters failed");
+    return 1;
+  }
+
+  err = hci_le_set_scan_enable(dd, /*enable=*/0x01, filter_dup, 10000);
+  if (err < 0) {
+    perror("Enable scan failed");
+    return 1;
+  }
+
+  temperature = (int*) malloc(nDevs * sizeof(int));
+  humidity = (int*) malloc(nDevs * sizeof(int));
+  battery = (int*) malloc(nDevs * sizeof(int));
+  ntSamples = (int*) malloc(nDevs * sizeof(int));
+  nhSamples = (int*) malloc(nDevs * sizeof(int));
+  timeTemperature = malloc(nDevs * sizeof(long));
+  timeHumidity = malloc(nDevs * sizeof(long));
+  timeBattery = malloc(nDevs * sizeof(long));
+  for (i = 0; i < nDevs; i++) {
+    temperature[i] = 0;
+    humidity[i] = 0;
+    battery[i] = 0;
+    ntSamples[i] = 0;
+    nhSamples[i] = 0;
+  }
+
+  err = print_advertising_devices(dd, filter_type);
+  if (err < 0) {
+    printf("Could not receive advertising events\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+int main(int argc, char *argv[])
+{
+  int opt, dd;
   int i, dev_id = -1;
+  uint8_t filter_dup = 0x01; /* Ffilter duplicates (0x00 d don't filter duplicates) */
   char bad_chars[] = "!@%^*~|";
   char invalid_found = 0;
   
@@ -362,76 +432,17 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  /* clear white list */
-  err = hci_le_clear_white_list(dd, 1000);
-  if (err < 0) {
-    err = -errno;
-    fprintf(stderr, "Can't clear white list: %s(%d)\n",
-              strerror(-err), -err);
-    exit(1);
-  }
+  int ret = run(dd, argv, filter_dup);
 
-  /* add BT devices to white list */
-  devsBtAddr = malloc(nDevs * sizeof(bdaddr_t));
-  for (i=0; i<nDevs; i++) {
-    err = str2ba(argv[i], &devsBtAddr[i]);
-    if (err < 0) {
-      printf("Bad BT address\n");
-      exit(1);
-    }
-
-    err = hci_le_add_white_list(dd, &devsBtAddr[i], own_type, 1000);
-    if (err < 0) {
-      err = -errno;
-      fprintf(stderr, "Can't add to white list: %s(%d)\n",
-                strerror(-err), -err);
-      exit(1);
-    }
-  }
-
-  err = hci_le_set_scan_parameters(dd, scan_type, interval, window,
-            own_type, filter_policy, 10000);
-  if (err < 0) {
-    perror("Set scan parameters failed");
-    exit(1);
-  }
-
-  err = hci_le_set_scan_enable(dd, 0x01, filter_dup, 10000);
-  if (err < 0) {
-    perror("Enable scan failed");
-    exit(1);
-  }
-
-  temperature = (int*) malloc(nDevs * sizeof(int));
-  humidity = (int*) malloc(nDevs * sizeof(int));
-  battery = (int*) malloc(nDevs * sizeof(int));
-  ntSamples = (int*) malloc(nDevs * sizeof(int));
-  nhSamples = (int*) malloc(nDevs * sizeof(int));
-  timeTemperature = malloc(nDevs * sizeof(long));
-  timeHumidity = malloc(nDevs * sizeof(long));
-  timeBattery = malloc(nDevs * sizeof(long));
-  for (i = 0; i < nDevs; i++) {
-    temperature[i] = 0;
-    humidity[i] = 0;
-    battery[i] = 0;
-    ntSamples[i] = 0;
-    nhSamples[i] = 0;
-  }
-
-  err = print_advertising_devices(dd, filter_type);
-  if (err < 0) {
-    printf("Could not receive advertising events\n");
-    exit(1);
-  }
-
-  err = hci_le_set_scan_enable(dd, 0x00, filter_dup, 10000);
-  if (err < 0) {
+  // These need to be called at all times, or otherwise bluetooth device will be
+  // locked and needs to be restarted.
+  if (hci_le_set_scan_enable(dd, /*enable=*/0x00, filter_dup, 10000) < 0) {
     perror("Disable scan failed");
-    exit(1);
   }
-
   hci_close_dev(dd);
 
-  outputValues();
-  return 0;
+  if (ret == 0) {
+    outputValues();
+  }
+  return ret;
 }
