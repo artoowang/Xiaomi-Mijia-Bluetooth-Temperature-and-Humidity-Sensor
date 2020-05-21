@@ -151,17 +151,17 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
     len = 0;
     FD_ZERO(&set); /* clear the set */
     FD_SET(dd, &set); /* add our file descriptor to the set */
-    //if (maxTime > 0) {
-    //  timeout.tv_sec = maxTime - (time(NULL) - startTime);
-    //  timeout.tv_usec = 0;
-    //  if (timeout.tv_sec <= 0)
-    //    goto done;
-                //        printf("ZZZ: select() ...\n");
-    //  rv = select(dd + 1, &set, NULL, NULL, &timeout);
-                //        printf("ZZZ: select(): rv: %d\n", rv);
-    //} else {
-    //  rv = select(dd + 1, &set, NULL, NULL, NULL);
-                //}
+    if (maxTime > 0) {
+      timeout.tv_sec = maxTime - (time(NULL) - startTime);
+      timeout.tv_usec = 0;
+      if (timeout.tv_sec <= 0)
+        goto done;
+      printf("ZZZ: select() ...\n");
+      rv = select(dd + 1, &set, NULL, NULL, &timeout);
+      printf("ZZZ: select(): rv: %d\n", rv);
+    } else {
+      rv = select(dd + 1, &set, NULL, NULL, NULL);
+    }
 
     if(rv == -1) { /* an error accured */
       perror("select");
@@ -170,7 +170,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
     } else if (rv == 0) { /* a timeout occured */
       goto done;
     }
-                printf("ZZZ: read() ...\n");
+    printf("ZZZ: read() ...\n");
     len = read(dd, buf, sizeof(buf));
     printf("ZZZ: read(): %d\nHCI_EVENT_HDR_SIZE: %d\n", len, HCI_EVENT_HDR_SIZE);
 
@@ -363,7 +363,9 @@ int main(int argc, char *argv[])
 {
   int opt, dd;
   int i, dev_id = -1;
-  uint8_t filter_dup = 0x01; /* Ffilter duplicates (0x00 d don't filter duplicates) */
+  // Don't filter duplicates. On Rpi, if I filter duplicates I'll only get the
+  // first message.
+  uint8_t filter_dup = 0x00;
   char bad_chars[] = "!@%^*~|";
   char invalid_found = 0;
   
