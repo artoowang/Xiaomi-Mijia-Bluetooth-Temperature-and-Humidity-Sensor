@@ -25,4 +25,5 @@ bool BleScan::Initialize(std::string bluetooth_addr) {
     perror("hci_open_dev failed");
     return false;
   }
+  return true;
 }
