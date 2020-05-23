@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include <bluetooth/hci_lib.h>
+#include <unistd.h>
 
 namespace {
 
@@ -102,6 +103,13 @@ bool BleScan::Initialize(std::string bluetooth_addr) {
   return true;
 }
 
-// TODO: Support returning address
-std::string BleScan::Read() {
+// TODO: Support returning address and timeout.
+PyObject* BleScan::Read() {
+  if (dd_ < 0) {
+    std::cerr << "Cannot read: BleScan is not initialized." << std::endl;
+    return nullptr;
+  }
+  char buf[HCI_MAX_EVENT_SIZE];
+  int len = read(dd_, buf, sizeof(buf));
+  return PyBytes_FromStringAndSize(buf, len);
 }

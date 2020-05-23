@@ -3,6 +3,7 @@
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
+#include <boost/python.hpp>
 
 class BleScan {
  public:
@@ -10,7 +11,7 @@ class BleScan {
   ~BleScan();
 
   bool Initialize(std::string bluetooth_addr);
-  std::string Read();
+  PyObject* Read();
 
  private:
   std::string bluetooth_addr_;
