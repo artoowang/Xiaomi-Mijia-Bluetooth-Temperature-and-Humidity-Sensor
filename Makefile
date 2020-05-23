@@ -1,13 +1,5 @@
-CC=gcc
-CFLAGS=-I.
-DEPS = bluetooth.h  hci.h  hci_lib.h  oui.h
-OBJ = bluetooth.o  hci.o  scanMijia.o  oui.o 
-
-%.o: %.cc $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
-
-scanMijia: $(OBJ)
-	g++ -O2 -o $@ $^ $(CFLAGS)
+scanMijia:
+	g++ -O2 -o $@ scanMijia.cc -lbluetooth
 
 clean:
 	rm -f *.o *~ core scanMijia 
