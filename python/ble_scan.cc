@@ -2,8 +2,6 @@
 
 #include <iostream>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
 
 namespace {
@@ -24,6 +22,13 @@ BleScan::BleScan() {}
 BleScan::~BleScan() {
   if (dd_ < 0) {
     return;
+  }
+  if (previous_filter_.has_value()) {
+    // Restore previous socket settings.
+    if (setsockopt(dd_, SOL_HCI, HCI_FILTER, &*previous_filter_,
+                   sizeof(*previous_filter_)) < 0) {
+      std::cerr << "Cannot restore previous socket settings." << std::endl;
+    }
   }
   // These need to be called at all times, or otherwise bluetooth device will be
   // locked and needs to be restarted.
@@ -78,5 +83,25 @@ bool BleScan::Initialize(std::string bluetooth_addr) {
     perror("hci_le_set_scan_enable failed");
     return false;
   }
+  // Backup previous HCI filter settings.
+  struct hci_filter filter;
+  socklen_t olen = sizeof(filter);
+  if (getsockopt(dd_, SOL_HCI, HCI_FILTER, &filter, &olen) < 0) {
+    std::cerr << "Could not get socket options." << std::endl;
+    return false;
+  }
+  previous_filter_ = filter;
+  // Set desired filter settings.
+  hci_filter_clear(&filter);
+  hci_filter_set_ptype(HCI_EVENT_PKT, &filter);
+  hci_filter_set_event(EVT_LE_META_EVENT, &filter);
+  if (setsockopt(dd_, SOL_HCI, HCI_FILTER, &filter, sizeof(filter)) < 0) {
+    std::cerr << "Could not set socket options." << std::endl;
+    return false;
+  }
   return true;
+}
+
+// TODO: Support returning address
+std::string BleScan::Read() {
 }
