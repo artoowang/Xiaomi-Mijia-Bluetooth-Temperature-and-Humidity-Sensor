@@ -111,5 +111,9 @@ PyObject* BleScan::Read() {
   }
   char buf[HCI_MAX_EVENT_SIZE];
   int len = read(dd_, buf, sizeof(buf));
+  if (len < 0) {
+    perror("Failed to read");
+    return nullptr;
+  }
   return PyBytes_FromStringAndSize(buf, len);
 }
