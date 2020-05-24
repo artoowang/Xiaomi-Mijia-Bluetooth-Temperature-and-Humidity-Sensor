@@ -22,7 +22,7 @@ def onConnect(client, userdata, flags, rc):
   if rc != 0:
     sys.exit(1)
 
-if len(sys.argv) < 7:
+if len(sys.argv) < 8:
   # TODO: uncomment after arguments are decided.
   #sys.stderr.write('Usage: %s <Bluetooth_address>\n' % sys.argv[0])
   sys.exit(1)
@@ -33,6 +33,7 @@ mqtt_password = sys.argv[3]
 mqtt_ip = sys.argv[4]
 topic_temp = sys.argv[5]
 topic_humid = sys.argv[6]
+topic_battery = sys.argv[7]
 
 ble_scan = BleScan()
 if not ble_scan.initialize(bt_address):
@@ -80,3 +81,4 @@ while True:
     client.publish(topic_humid, "{\"humidity\": %f}" % relative_humidity)
   if has_battery:
     print("B %d" % battery_percentage)  # TODO
+    client.publish(topic_battery, "{\"battery\": %d}" % battery_percentage)
