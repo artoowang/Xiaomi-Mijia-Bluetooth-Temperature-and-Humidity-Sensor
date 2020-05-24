@@ -2,6 +2,7 @@
 
 from BleScan import BleScan
 
+import paho.mqtt.client as mqtt
 import sys
 
 def ExitWithError(*args, **kwargs):
@@ -11,18 +12,41 @@ def ExitWithError(*args, **kwargs):
 def GetUInt16(upper_byte, lower_byte):
   return upper_byte << 8 | lower_byte
 
-if len(sys.argv) < 2:
-  sys.stderr.write('Usage: %s <Bluetooth_address>\n' % sys.argv[0])
+def onMessage(client, userdata, message):
+  topic = str(message.topic)
+  message = str(message.payload.decode("utf-8"))
+  print(topic + message)
+
+def onConnect(client, userdata, flags, rc):
+  print("Connected with result code " + str(rc))
+  if rc != 0:
+    sys.exit(1)
+
+if len(sys.argv) < 7:
+  # TODO: uncomment after arguments are decided.
+  #sys.stderr.write('Usage: %s <Bluetooth_address>\n' % sys.argv[0])
   sys.exit(1)
 
-b = BleScan()
-if not b.initialize(sys.argv[1]):
+bt_address = sys.argv[1]
+mqtt_username = sys.argv[2]
+mqtt_password = sys.argv[3]
+mqtt_ip = sys.argv[4]
+topic_temp = sys.argv[5]
+topic_humid = sys.argv[6]
+
+ble_scan = BleScan()
+if not ble_scan.initialize(bt_address):
   ExitWithError("Failed to initialize BleScan.")
 
+client = mqtt.Client()
+client.username_pw_set(mqtt_username, mqtt_password)
+client.on_connect = onConnect
+client.on_message = onMessage
+client.connect(mqtt_ip, 1883)
+client.loop_start()
+
 while True:
-  data = b.read()
-  #print(len(data))  # TODO
-  #print(data)  # TODO
+  data = ble_scan.read()
   if len(data) != 22 and len(data) != 23 and len(data) != 25:
     continue
   if data[4] != 0x16 or data[5] != 0x95 or data[6] != 0xFE:
@@ -48,9 +72,11 @@ while True:
 
   if has_temperature:
     temperature_fahrenheit = temperature_celsius * 9.0 / 5.0 + 32.0
-    print("T %f" % temperature_fahrenheit)
+    print("T %f" % temperature_fahrenheit)  # TODO
+    client.publish(topic_temp, "{\"temperatureF\": %f}" %
+                   temperature_fahrenheit)
   if has_humidity:
-    print("H %f" % relative_humidity)
+    print("H %f" % relative_humidity)  # TODO
+    client.publish(topic_humid, "{\"humidity\": %f}" % relative_humidity)
   if has_battery:
-    print("B %d" % battery_percentage)
-  #import pdb; pdb.set_trace()
+    print("B %d" % battery_percentage)  # TODO
