@@ -47,7 +47,8 @@ while True:
     has_humidity = True
 
   if has_temperature:
-    print("T %f" % temperature_celsius)
+    temperature_fahrenheit = temperature_celsius * 9.0 / 5.0 + 32.0
+    print("T %f" % temperature_fahrenheit)
   if has_humidity:
     print("H %f" % relative_humidity)
   if has_battery:
