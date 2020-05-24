@@ -14,7 +14,7 @@ class BleScan {
   PyObject* Read();
 
  private:
-  std::string bluetooth_addr_;
+  bdaddr_t bluetooth_addr_;
   int dd_ = -1;
   std::optional<struct hci_filter> previous_filter_;
 };

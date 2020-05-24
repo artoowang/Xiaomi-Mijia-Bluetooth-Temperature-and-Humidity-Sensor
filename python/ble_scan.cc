@@ -45,6 +45,11 @@ BleScan::~BleScan() {
 
 // TODO: support multiple devices.
 bool BleScan::Initialize(std::string bluetooth_addr) {
+  if (str2ba(bluetooth_addr.c_str(), &bluetooth_addr_) < 0) {
+    std::cerr << "Bad BT address: " << bluetooth_addr << std::endl;
+    return false;
+  }
+
   int dev_id = hci_get_route(nullptr);
   if (dev_id < 0) {
     perror("hci_get_route failed");
@@ -61,13 +66,7 @@ bool BleScan::Initialize(std::string bluetooth_addr) {
     return false;
   }
   // Add BT devices to white list.
-  bdaddr_t device_addr;
-  if (str2ba(bluetooth_addr.c_str(), &device_addr) < 0) {
-    std::cerr << "Bad BT address: " << bluetooth_addr << std::endl;
-    return false;
-  }
-  if (hci_le_add_white_list(dd_, &device_addr, kOwnType, /*to=*/1000) <
-      0) {
+  if (hci_le_add_white_list(dd_, &bluetooth_addr_, kOwnType, /*to=*/1000) < 0) {
     perror("hci_le_add_white_list failed");
     return false;
   }
@@ -115,5 +114,35 @@ PyObject* BleScan::Read() {
     perror("Failed to read");
     return nullptr;
   }
-  return PyBytes_FromStringAndSize(buf, len);
+
+  if (len <= HCI_EVENT_HDR_SIZE + 1) {
+    std::cerr << "Received data is too small. Expected more then "
+              << HCI_EVENT_HDR_SIZE + 1 << " bytes, but received only " << len;
+    return nullptr;
+  }
+  const auto *meta = reinterpret_cast<const evt_le_meta_event *>(
+      buf + (1 + HCI_EVENT_HDR_SIZE));
+  if (meta->subevent != 0x02) {
+    std::cerr << "Unexpected evt_le_meta_event::subevent: expected 0x02, but "
+                 "received "
+              << meta->subevent;
+    return nullptr;
+  }
+
+  // Currently ignore multiple reports, and only process the first one.
+  const auto *info =
+      reinterpret_cast<const le_advertising_info *>(meta->data + 1);
+
+  // Sanity check to see if the received report comes from expected source.
+  if (memcmp(&bluetooth_addr_, &info->bdaddr, sizeof(bdaddr_t) != 0)) {
+    char expected[18] = {0};
+    char received[18] = {0};
+    ba2str(&bluetooth_addr_, expected);
+    ba2str(&info->bdaddr, received);
+    std::cerr << "Unexpected event from Bluetooth address " << received
+              << ". Was expecting from " << expected;
+  }
+
+  return PyBytes_FromStringAndSize(reinterpret_cast<const char *>(info->data),
+                                   info->length);
 }
