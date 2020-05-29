@@ -4,4 +4,4 @@ from BleScan import BleScan
 
 b = BleScan()
 print(b)
-print(b.initialize("lele"));
+print(b.initialize(["lele", "lala"]));

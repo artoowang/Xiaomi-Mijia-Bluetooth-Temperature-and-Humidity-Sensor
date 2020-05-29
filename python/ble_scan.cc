@@ -43,8 +43,10 @@ BleScan::~BleScan() {
   printf("BleScan destroyed.\n");  // TODO
 }
 
-bool BleScan::Initialize(const std::vector<std::string>& bluetooth_addrs) {
-  for (const std::string& addr_str : bluetooth_addrs) {
+bool BleScan::Initialize(const boost::python::list& bluetooth_addrs) {
+  for (int i = 0; i < len(bluetooth_addrs); ++i) {
+    const std::string addr_str =
+        boost::python::extract<std::string>(bluetooth_addrs[i]);
     bdaddr_t addr;
     if (str2ba(addr_str.c_str(), &addr) < 0) {
       std::cerr << "Ignore bad BT address: " << addr_str << std::endl;
@@ -74,10 +76,14 @@ bool BleScan::Initialize(const std::vector<std::string>& bluetooth_addrs) {
     return false;
   }
   // Add BT devices to white list.
-  if (hci_le_add_white_list(dd_, &bluetooth_addrs_[0], kOwnType, /*to=*/1000) < 0) {
-    perror("hci_le_add_white_list failed");
-    return false;
+  for (const bdaddr_t& addr : bluetooth_addrs_) {
+    if (hci_le_add_white_list(dd_, &addr, kOwnType, /*to=*/1000) < 0) {
+      char addr_str[18] = {0};
+      ba2str(&addr, addr_str);
+      std::cerr << "hci_le_add_white_list failed to add " << addr_str << std::endl;
+    }
   }
+
   // Start scan.
   const uint16_t interval = htobs(0x0010);
   const uint16_t window = htobs(0x0010);
@@ -125,7 +131,8 @@ PyObject* BleScan::Read() {
 
   if (len <= HCI_EVENT_HDR_SIZE + 1) {
     std::cerr << "Received data is too small. Expected more then "
-              << HCI_EVENT_HDR_SIZE + 1 << " bytes, but received only " << len;
+              << HCI_EVENT_HDR_SIZE + 1 << " bytes, but received only " << len
+              << std::endl;
     return nullptr;
   }
   const auto *meta = reinterpret_cast<const evt_le_meta_event *>(
@@ -133,7 +140,7 @@ PyObject* BleScan::Read() {
   if (meta->subevent != 0x02) {
     std::cerr << "Unexpected evt_le_meta_event::subevent: expected 0x02, but "
                  "received "
-              << meta->subevent;
+              << meta->subevent << std::endl;
     return nullptr;
   }
 
@@ -141,16 +148,13 @@ PyObject* BleScan::Read() {
   const auto *info =
       reinterpret_cast<const le_advertising_info *>(meta->data + 1);
 
-  // Sanity check to see if the received report comes from expected source.
-  if (memcmp(&bluetooth_addrs_[0], &info->bdaddr, sizeof(bdaddr_t) != 0)) {
-    char expected[18] = {0};
-    char received[18] = {0};
-    ba2str(&bluetooth_addrs_[0], expected);
-    ba2str(&info->bdaddr, received);
-    std::cerr << "Unexpected event from Bluetooth address " << received
-              << ". Was expecting from " << expected;
+  char addr_str[18] = {0};
+  if (ba2str(&info->bdaddr, addr_str) < 0) {
+    std::cerr << "Failed to convert bluetooth address to string." << std::endl;
   }
 
-  return PyBytes_FromStringAndSize(reinterpret_cast<const char *>(info->data),
-                                   info->length);
+  return PyTuple_Pack(
+      2, PyUnicode_FromString(addr_str),
+      PyBytes_FromStringAndSize(reinterpret_cast<const char *>(info->data),
+                                info->length));
 }

@@ -6,14 +6,12 @@
 #include <bluetooth/hci.h>
 #include <boost/python.hpp>
 
-using StrList = std::vector<std::string>;
-
 class BleScan {
  public:
   BleScan();
   ~BleScan();
 
-  bool Initialize(const StrList& bluetooth_addrs);
+  bool Initialize(const boost::python::list& bluetooth_addrs);
   PyObject* Read();
 
  private:
