@@ -6,8 +6,6 @@ import paho.mqtt.client as mqtt
 import signal
 import sys
 
-exit_flag = False
-
 def signal_handler(sig, frame):
   # Do nothing. This is just to keep Python going. The BleScan#read below should
   # return None.

@@ -3,7 +3,13 @@
 from BleScan import BleScan
 
 import paho.mqtt.client as mqtt
+import signal
 import sys
+
+def signal_handler(sig, frame):
+  # Do nothing. This is just to keep Python going. The BleScan#read below should
+  # return None.
+  pass
 
 def ExitWithError(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
@@ -27,6 +33,8 @@ if len(sys.argv) < 8:
   #sys.stderr.write('Usage: %s <Bluetooth_address>\n' % sys.argv[0])
   sys.exit(1)
 
+signal.signal(signal.SIGINT, signal_handler)
+
 bt_address = sys.argv[1]
 mqtt_username = sys.argv[2]
 mqtt_password = sys.argv[3]
@@ -48,6 +56,9 @@ client.loop_start()
 
 while True:
   data = ble_scan.read()
+  # Ctrl-C triggers this.
+  if data is None:
+    break
   if len(data) != 22 and len(data) != 23 and len(data) != 25:
     continue
   if data[4] != 0x16 or data[5] != 0x95 or data[6] != 0xFE:
@@ -82,3 +93,8 @@ while True:
   if has_battery:
     print("B %d" % battery_percentage)  # TODO
     client.publish(topic_battery, "{\"battery\": %d}" % battery_percentage)
+
+# TODO(artoowang): Should consider using "with" statement:
+# https://stackoverflow.com/questions/6772481/how-to-force-deletion-of-a-python-object
+del ble_scan
+print("Shutting down ...")
