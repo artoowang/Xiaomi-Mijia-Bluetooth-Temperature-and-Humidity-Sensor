@@ -44,7 +44,7 @@ topic_humid = sys.argv[6]
 topic_battery = sys.argv[7]
 
 ble_scan = BleScan()
-if not ble_scan.initialize(bt_address):
+if not ble_scan.initialize([bt_address]):
   ExitWithError("Failed to initialize BleScan.")
 
 client = mqtt.Client()

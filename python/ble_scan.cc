@@ -43,10 +43,18 @@ BleScan::~BleScan() {
   printf("BleScan destroyed.\n");  // TODO
 }
 
-// TODO: support multiple devices.
-bool BleScan::Initialize(std::string bluetooth_addr) {
-  if (str2ba(bluetooth_addr.c_str(), &bluetooth_addr_) < 0) {
-    std::cerr << "Bad BT address: " << bluetooth_addr << std::endl;
+bool BleScan::Initialize(const std::vector<std::string>& bluetooth_addrs) {
+  for (const std::string& addr_str : bluetooth_addrs) {
+    bdaddr_t addr;
+    if (str2ba(addr_str.c_str(), &addr) < 0) {
+      std::cerr << "Ignore bad BT address: " << addr_str << std::endl;
+      continue;
+    }
+    bluetooth_addrs_.push_back(addr);
+  }
+
+  if (bluetooth_addrs_.empty()) {
+    std::cerr << "No valid bluetooth address found." << std::endl;
     return false;
   }
 
@@ -66,7 +74,7 @@ bool BleScan::Initialize(std::string bluetooth_addr) {
     return false;
   }
   // Add BT devices to white list.
-  if (hci_le_add_white_list(dd_, &bluetooth_addr_, kOwnType, /*to=*/1000) < 0) {
+  if (hci_le_add_white_list(dd_, &bluetooth_addrs_[0], kOwnType, /*to=*/1000) < 0) {
     perror("hci_le_add_white_list failed");
     return false;
   }
@@ -134,10 +142,10 @@ PyObject* BleScan::Read() {
       reinterpret_cast<const le_advertising_info *>(meta->data + 1);
 
   // Sanity check to see if the received report comes from expected source.
-  if (memcmp(&bluetooth_addr_, &info->bdaddr, sizeof(bdaddr_t) != 0)) {
+  if (memcmp(&bluetooth_addrs_[0], &info->bdaddr, sizeof(bdaddr_t) != 0)) {
     char expected[18] = {0};
     char received[18] = {0};
-    ba2str(&bluetooth_addr_, expected);
+    ba2str(&bluetooth_addrs_[0], expected);
     ba2str(&info->bdaddr, received);
     std::cerr << "Unexpected event from Bluetooth address " << received
               << ". Was expecting from " << expected;
