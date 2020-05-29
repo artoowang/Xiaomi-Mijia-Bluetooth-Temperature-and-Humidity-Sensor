@@ -56,10 +56,11 @@ client.connect(mqtt_ip, 1883)
 client.loop_start()
 
 while True:
-  data = ble_scan.read()
+  result = ble_scan.read()
   # Ctrl-C triggers this.
-  if data is None:
+  if result is None:
     break
+  (addr, data) = result
   if len(data) != 22 and len(data) != 23 and len(data) != 25:
     continue
   if data[4] != 0x16 or data[5] != 0x95 or data[6] != 0xFE:
@@ -85,14 +86,14 @@ while True:
 
   if has_temperature:
     temperature_fahrenheit = temperature_celsius * 9.0 / 5.0 + 32.0
-    print("T %f" % temperature_fahrenheit)  # TODO
+    print("%s - T %f" % (addr, temperature_fahrenheit))
     client.publish(topic_temp, "{\"temperatureF\": %f}" %
                    temperature_fahrenheit)
   if has_humidity:
-    print("H %f" % relative_humidity)  # TODO
+    print("%s - H %f" % (addr, relative_humidity))
     client.publish(topic_humid, "{\"humidity\": %f}" % relative_humidity)
   if has_battery:
-    print("B %d" % battery_percentage)  # TODO
+    print("%s - B %d" % (addr, battery_percentage))
     client.publish(topic_battery, "{\"battery\": %d}" % battery_percentage)
 
 # TODO(artoowang): Should consider using "with" statement:
