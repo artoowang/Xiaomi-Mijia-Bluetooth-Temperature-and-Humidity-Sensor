@@ -29,22 +29,23 @@ def onConnect(client, userdata, flags, rc):
     sys.exit(1)
 
 if len(sys.argv) < 8:
-  # TODO: uncomment after arguments are decided.
-  #sys.stderr.write('Usage: %s <Bluetooth_address>\n' % sys.argv[0])
+  sys.stderr.write('Usage: %s <mqtt_username> <mqtt_password> <mqtt_ip> '
+                   '<topic_temp> <topic_humid> <topic_battery> '
+                   '<bluetooth_addr1> [<bluetooth_addre2> ...]\n' % sys.argv[0])
   sys.exit(1)
 
 signal.signal(signal.SIGINT, signal_handler)
 
-bt_address = sys.argv[1]
-mqtt_username = sys.argv[2]
-mqtt_password = sys.argv[3]
-mqtt_ip = sys.argv[4]
-topic_temp = sys.argv[5]
-topic_humid = sys.argv[6]
-topic_battery = sys.argv[7]
+mqtt_username = sys.argv[1]
+mqtt_password = sys.argv[2]
+mqtt_ip = sys.argv[3]
+topic_temp = sys.argv[4]
+topic_humid = sys.argv[5]
+topic_battery = sys.argv[6]
+bt_addrs = sys.argv[7:]
 
 ble_scan = BleScan()
-if not ble_scan.initialize(bt_address):
+if not ble_scan.initialize(bt_addrs):
   ExitWithError("Failed to initialize BleScan.")
 
 client = mqtt.Client()
@@ -55,10 +56,11 @@ client.connect(mqtt_ip, 1883)
 client.loop_start()
 
 while True:
-  data = ble_scan.read()
+  result = ble_scan.read()
   # Ctrl-C triggers this.
-  if data is None:
+  if result is None:
     break
+  (addr, data) = result
   print("len(data): %d" % len(data))
   #if len(data) != 22 and len(data) != 23 and len(data) != 25:
   #  continue
