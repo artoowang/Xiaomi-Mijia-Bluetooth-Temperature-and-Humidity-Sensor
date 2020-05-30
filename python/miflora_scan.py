@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from BleScan import BleScan
+from mijia_config import mijia_config
 
 import paho.mqtt.client as mqtt
 import signal
@@ -15,7 +16,16 @@ def ExitWithError(*args, **kwargs):
   print(*args, file=sys.stderr, **kwargs)
   sys.exit(1)
 
-def GetUInt16(upper_byte, lower_byte):
+def decodeTemperatureFahrenheit(upper_byte, lower_byte):
+  return (upper_byte << 8 | lower_byte) * 0.1 * 9.0 / 5.0 + 32.0
+
+def decodeRelativeHumidity(upper_byte, lower_byte):
+  return (upper_byte << 8 | lower_byte) * 0.1
+
+def decodeIlluminance(upper_byte, mid_byte, lower_byte):
+  return upper_byte << 16 | mid_byte << 8 | lower_byte
+
+def decodeConductivity(upper_byte, lower_byte):
   return upper_byte << 8 | lower_byte
 
 def onMessage(client, userdata, message):
@@ -34,10 +44,13 @@ def data2str(data):
     data_str += "%02x " % c
   return data_str
 
-if len(sys.argv) < 8:
-  sys.stderr.write('Usage: %s <mqtt_username> <mqtt_password> <mqtt_ip> '
-                   '<topic_temp> <topic_humid> <topic_battery> '
-                   '<bluetooth_addr1> [<bluetooth_addre2> ...]\n' % sys.argv[0])
+def publish(client, topic, value_str):
+  print("%s: %s" % (topic, value_str))
+  client.publish(topic, "{\"v\": %s}" % value_str)
+
+if len(sys.argv) < 4:
+  sys.stderr.write('Usage: %s <mqtt_username> <mqtt_password> <mqtt_ip> ' %
+                   sys.argv[0])
   sys.exit(1)
 
 signal.signal(signal.SIGINT, signal_handler)
@@ -45,10 +58,10 @@ signal.signal(signal.SIGINT, signal_handler)
 mqtt_username = sys.argv[1]
 mqtt_password = sys.argv[2]
 mqtt_ip = sys.argv[3]
-topic_temp = sys.argv[4]
-topic_humid = sys.argv[5]
-topic_battery = sys.argv[6]
-bt_addrs = sys.argv[7:]
+
+print("Configurations:\n" + str(mijia_config))
+
+bt_addrs = list(mijia_config.keys())
 
 ble_scan = BleScan()
 if not ble_scan.initialize(bt_addrs):
@@ -112,43 +125,35 @@ while True:
 
   result = {}
   if msg[0] == 0x0D and msg_length == 4:  # Temperature and humidity.
-    result['temperature_celsius'] = GetUInt16(msg[4], msg[3]) * 0.1
-    result['relative_humidity'] = GetUInt16(msg[6], msg[5]) * 0.1
+    result['temperature_fahrenheit'] = decodeTemperatureFahrenheit(
+        msg[4], msg[3])
+    result['relative_humidity'] = decodeRelativeHumidity(msg[6], msg[5])
   elif msg[0] == 0x0A and msg_length == 1:  # Battery.
     result['battery_percentage'] = msg[3]
   elif msg[0] == 0x04 and msg_length == 2:  # Temperature.
-    result['temperature_celsius'] = GetUInt16(msg[4], msg[3]) * 0.1
+    result['temperature_fahrenheit'] = decodeTemperatureFahrenheit(
+       msg[4], msg[3])
   elif msg[0] == 0x06 and msg_length == 2:  # Humidity.
-    result['relative_humidity'] = GetUInt16(msg[4], msg[3]) * 0.1
+    result['relative_humidity'] = decodeRelativeHumidity(msg[4], msg[3])
   elif msg[0] == 0x07 and msg_length == 3:  # Illuminance.
-    result['illuminance'] = msg[5] << 16 | msg[4] << 8 | msg[3]
+    result['illuminance'] = decodeIlluminance(msg[5], msg[4], msg[3])
   elif msg[0] == 0x08 and msg_length == 1:  # Soil moisture.
     result['soil_moisture_percentage'] = msg[3]
   elif msg[0] == 0x09 and msg_length == 2:  # Conductivity.
-    result['conductivity'] = GetUInt16(msg[4], msg[3])
+    result['conductivity'] = decodeConductivity(msg[4], msg[3])
   else:
     print("Unrecognized message type: " + data2str(msg))
     continue
 
-  if 'temperature_celsius' in result:
-    temperature_fahrenheit = result['temperature_celsius'] * 9.0 / 5.0 + 32.0
-    print("T %f" % temperature_fahrenheit)
-    client.publish(topic_temp, "{\"temperatureF\": %f}" %
-                   temperature_fahrenheit)
-  if 'relative_humidity' in result:
-    print("H %f" % result['relative_humidity'])
-    client.publish(topic_humid, "{\"humidity\": %f}" %
-                   result['relative_humidity'])
-  if 'battery_percentage' in result:
-    print("B %d" % result['battery_percentage'])
-    client.publish(topic_battery, "{\"battery\": %d}" %
-                   result['battery_percentage'])
-  if 'illuminance' in result:
-    print("I %d" % result['illuminance'])
-  if 'soil_moisture_percentage' in result:
-    print("S %f" % result['soil_moisture_percentage'])
-  if 'conductivity' in result:
-    print("C %d" % result['conductivity'])
+  if addr not in mijia_config:
+    print("Unexpected MAC: %s" % addr)
+    continue
+  msg_topic_map = mijia_config[addr]
+  
+  for msg_name in msg_topic_map:
+    topic = msg_topic_map[msg_name]
+    if msg_name in result:
+      publish(client, topic, result[msg_name])
 
 # TODO(artoowang): Should consider using "with" statement:
 # https://stackoverflow.com/questions/6772481/how-to-force-deletion-of-a-python-object
