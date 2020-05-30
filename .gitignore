@@ -3,3 +3,4 @@
 scanMijia
 
 python/*.so
+python/mijia_config.py
