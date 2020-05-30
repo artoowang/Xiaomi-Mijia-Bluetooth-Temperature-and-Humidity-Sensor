@@ -102,38 +102,53 @@ while True:
     raw_offset = 11
 
   msg = raw[raw_offset:]
+  if len(msg) < 3:
+    print("Message too short: " + data2str(msg))
+    continue
+  msg_length = msg[2]
+  if msg[1] != 0x10 or msg_length != len(msg) - 3:
+    print("Unrecognized message: " + data2str(msg))
+    continue
 
-  print(data2str(msg))
+  result = {}
+  if msg[0] == 0x0D and msg_length == 4:  # Temperature and humidity.
+    result['temperature_celsius'] = GetUInt16(msg[4], msg[3]) * 0.1
+    result['relative_humidity'] = GetUInt16(msg[6], msg[5]) * 0.1
+  elif msg[0] == 0x0A and msg_length == 1:  # Battery.
+    result['battery_percentage'] = msg[3]
+  elif msg[0] == 0x04 and msg_length == 2:  # Temperature.
+    result['temperature_celsius'] = GetUInt16(msg[4], msg[3]) * 0.1
+  elif msg[0] == 0x06 and msg_length == 2:  # Humidity.
+    result['relative_humidity'] = GetUInt16(msg[4], msg[3]) * 0.1
+  elif msg[0] == 0x07 and msg_length == 3:  # Illuminance.
+    result['illuminance'] = msg[5] << 16 | msg[4] << 8 | msg[3]
+  elif msg[0] == 0x08 and msg_length == 1:  # Soil moisture.
+    result['soil_moisture_percentage'] = msg[3]
+  elif msg[0] == 0x09 and msg_length == 2:  # Conductivity.
+    result['conductivity'] = GetUInt16(msg[4], msg[3])
+  else:
+    print("Unrecognized message type: " + data2str(msg))
+    continue
 
-  #has_temperature = False
-  #has_humidity = False
-  #has_battery = False
-  #if data[18] == 0x0D:  # Temperature and humidity.
-  #  temperature_celsius = GetUInt16(data[22], data[21]) * 0.1
-  #  has_temperature = True
-  #  relative_humidity = GetUInt16(data[24], data[23]) * 0.1
-  #  has_humidity = True
-  #elif data[18] == 0x0A:  # Battery.
-  #  battery_percentage = data[21]
-  #  has_battery = True
-  #elif data[18] == 0x04:  # Temperature.
-  #  temperature_celsius = GetUInt16(data[22], data[21]) * 0.1
-  #  has_temperature = True
-  #elif data[18] == 0x06:  # Humidity.
-  #  relative_humidity = GetUInt16(data[22], data[21]) * 0.1
-  #  has_humidity = True
-
-  #if has_temperature:
-  #  temperature_fahrenheit = temperature_celsius * 9.0 / 5.0 + 32.0
-  #  print("T %f" % temperature_fahrenheit)  # TODO
-  #  client.publish(topic_temp, "{\"temperatureF\": %f}" %
-  #                 temperature_fahrenheit)
-  #if has_humidity:
-  #  print("H %f" % relative_humidity)  # TODO
-  #  client.publish(topic_humid, "{\"humidity\": %f}" % relative_humidity)
-  #if has_battery:
-  #  print("B %d" % battery_percentage)  # TODO
-  #  client.publish(topic_battery, "{\"battery\": %d}" % battery_percentage)
+  if 'temperature_celsius' in result:
+    temperature_fahrenheit = result['temperature_celsius'] * 9.0 / 5.0 + 32.0
+    print("T %f" % temperature_fahrenheit)
+    client.publish(topic_temp, "{\"temperatureF\": %f}" %
+                   temperature_fahrenheit)
+  if 'relative_humidity' in result:
+    print("H %f" % result['relative_humidity'])
+    client.publish(topic_humid, "{\"humidity\": %f}" %
+                   result['relative_humidity'])
+  if 'battery_percentage' in result:
+    print("B %d" % result['battery_percentage'])
+    client.publish(topic_battery, "{\"battery\": %d}" %
+                   result['battery_percentage'])
+  if 'illuminance' in result:
+    print("I %d" % result['illuminance'])
+  if 'soil_moisture_percentage' in result:
+    print("S %f" % result['soil_moisture_percentage'])
+  if 'conductivity' in result:
+    print("C %d" % result['conductivity'])
 
 # TODO(artoowang): Should consider using "with" statement:
 # https://stackoverflow.com/questions/6772481/how-to-force-deletion-of-a-python-object
