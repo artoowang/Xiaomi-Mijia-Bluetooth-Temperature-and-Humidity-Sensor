@@ -28,6 +28,12 @@ def onConnect(client, userdata, flags, rc):
   if rc != 0:
     sys.exit(1)
 
+def data2str(data):
+  data_str = ""
+  for c in data:
+    data_str += "%02x " % c
+  return data_str
+
 if len(sys.argv) < 8:
   sys.stderr.write('Usage: %s <mqtt_username> <mqtt_password> <mqtt_ip> '
                    '<topic_temp> <topic_humid> <topic_battery> '
@@ -61,17 +67,43 @@ while True:
   if result is None:
     break
   (addr, data) = result
-  print("len(data): %d" % len(data))
-  #if len(data) != 22 and len(data) != 23 and len(data) != 25:
-  #  continue
-  print("%02x%02x%02x" %(data[4], data[5], data[6]))
-  #if data[4] != 0x16 or data[5] != 0x95 or data[6] != 0xFE:
-  #  continue
 
-  data_str = ""
-  for c in data:
-    data_str += "%02x" % c
-  print(data_str)
+  # Find where the message is. This is to mimic what 
+  # https://github.com/esphome/esphome/blob/dev/esphome/components/xiaomi_ble/xiaomi_ble.cpp
+  # is doing. Somehow the esp32_ble_tracker::ServiceData seems to be able to
+  # point to the correct place in the data, but we don't have that here.
+  # Instead, we check 2 known positions in the returned data for 0x95 and 0xFE
+  # magic bytes, and choose the latter one.
+  known_magic_bytes_positions = [9, 5]
+  raw = None
+  for pos in known_magic_bytes_positions:
+    if data[pos] == 0x95 and data[pos+1] == 0xFE:
+      raw = data[pos+2:]
+      break
+  if raw is None:
+    print("Cannot find magic bytes: " + data2str(data))
+    continue
+
+  device_type = None
+  if raw[2] == 0x98 and raw[3] == 0x00:
+    device_type = "HHCCJCY01"
+  elif raw[2] == 0x47 and raw[3] == 0x03:
+    device_type = "CGG1"
+
+  if device_type is None:
+    print("Unrecognized device type: %02x %02x" % (raw[2], raw[3]))
+    continue
+
+  # Copied from xiaomi_ble.cpp.
+  has_capability = raw[0] & 0x20 != 0
+  if has_capability:
+    raw_offset = 12
+  else:
+    raw_offset = 11
+
+  msg = raw[raw_offset:]
+
+  print(data2str(msg))
 
   #has_temperature = False
   #has_humidity = False
