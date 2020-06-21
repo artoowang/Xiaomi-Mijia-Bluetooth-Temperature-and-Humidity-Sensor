@@ -102,6 +102,8 @@ while True:
     device_type = "HHCCJCY01"
   elif raw[2] == 0x47 and raw[3] == 0x03:
     device_type = "CGG1"
+  elif raw[2] == 0xaa and raw[3] == 0x01:
+    device_type = "LYWSDCGQ"
 
   if device_type is None:
     print("Unrecognized device type: %02x %02x" % (raw[2], raw[3]))
