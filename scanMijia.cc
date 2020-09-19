@@ -318,7 +318,7 @@ void outputValues() {
 int run(int dd, char** bt_addrs, uint8_t filter_dup) {
   int err = 0;
   uint8_t own_type = LE_PUBLIC_ADDRESS; /* (other option LE_RANDOM_ADDRESS) */
-  uint8_t scan_type = 0x00; /* Passive (0x01 = normal scan) */ 
+  uint8_t scan_type = 0x01; /* Normal scan (0x00 = Passive) */ 
   uint8_t filter_type = 0;
   uint8_t filter_policy = 0x01; /* Whitelist (0x00 = normal scan) */
   uint16_t interval = htobs(0x0010);

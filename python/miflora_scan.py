@@ -63,6 +63,8 @@ print("Configurations:\n" + str(mijia_config))
 
 bt_addrs = list(mijia_config.keys())
 
+print("bt_addrs: " + str(bt_addrs))
+
 ble_scan = BleScan()
 if not ble_scan.initialize(bt_addrs):
   ExitWithError("Failed to initialize BleScan.")
@@ -80,6 +82,8 @@ while True:
   if result is None:
     break
   (addr, data) = result
+
+  print("Get data from MAC %s: %d bytes" % (addr, len(data)))
 
   # Find where the message is. This is to mimic what 
   # https://github.com/esphome/esphome/blob/dev/esphome/components/xiaomi_ble/xiaomi_ble.cpp
